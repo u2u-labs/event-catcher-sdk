@@ -14,8 +14,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
-	gateway2 "github.com/u2u-labs/event-catcher/proto/gateway"
-	node2 "github.com/u2u-labs/event-catcher/proto/node"
+	gateway2 "github.com/u2u-labs/event-catcher-sdk/proto/gateway"
+	node2 "github.com/u2u-labs/event-catcher-sdk/proto/node"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"

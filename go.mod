@@ -1,4 +1,4 @@
-module github.com/u2u-labs/event-catcher
+module github.com/u2u-labs/event-catcher-sdk
 
 go 1.23.0
 

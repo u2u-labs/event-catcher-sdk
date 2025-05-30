@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/u2u-labs/event-catcher/proto/node"
+	"github.com/u2u-labs/event-catcher-sdk/proto/node"
 	"go.uber.org/zap"
 )
 

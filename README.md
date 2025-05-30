@@ -12,7 +12,7 @@ A Go SDK for interacting with the Event Catcher blockchain event monitoring syst
 ## Installation
 
 ```bash
-go get github.com/u2u-labs/event-catcher
+go get github.com/u2u-labs/event-catcher-sdk
 ```
 
 ## Quick Start
@@ -26,7 +26,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/u2u-labs/event-catcher/client"
+	"github.com/u2u-labs/event-catcher-sdk/client"
 	"go.uber.org/zap"
 )
 
@@ -81,7 +81,7 @@ authToken := auth.ConnectionToken
 ### 4. Subscribe to Events
 
 ```go
-import "github.com/u2u-labs/event-catcher/proto/node"
+import "github.com/u2u-labs/event-catcher-sdk/proto/node"
 
 filter := &node.StreamEventsRequest{
     ChainId:         2484,
@@ -188,8 +188,8 @@ import (
     "log"
     "time"
     
-    "github.com/u2u-labs/event-catcher/client"
-    "github.com/u2u-labs/event-catcher/proto/node"
+    "github.com/u2u-labs/event-catcher-sdk/client"
+    "github.com/u2u-labs/event-catcher-sdk/proto/node"
 )
 
 func main() {
