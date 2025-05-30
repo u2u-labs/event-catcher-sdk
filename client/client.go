@@ -47,8 +47,10 @@ type RegisterContract struct {
 
 // StreamSubscription represents an active event stream
 type StreamSubscription struct {
-	ID     string
-	cancel context.CancelFunc
+	ID        string
+	cancel    context.CancelFunc
+	authToken string
+	nodeUrl   string
 }
 
 // GatewayClient is the main SDK client
@@ -231,8 +233,10 @@ func (c *GatewayClient) SubscribeEvent(ctx context.Context, nodeURL, authToken s
 	streamCtx, cancel := context.WithCancel(ctx)
 
 	subscription := &StreamSubscription{
-		ID:     uuid.New().String(),
-		cancel: cancel,
+		ID:        uuid.New().String(),
+		cancel:    cancel,
+		authToken: authToken,
+		nodeUrl:   nodeURL,
 	}
 
 	// Start stream
@@ -316,6 +320,7 @@ func (c *GatewayClient) Disconnect() error {
 	c.streamsMu.RLock()
 	for _, subscription := range c.streams {
 		subscription.cancel()
+		go c.disconnectStream(subscription)
 	}
 	c.streamsMu.RUnlock()
 
@@ -326,19 +331,39 @@ func (c *GatewayClient) Disconnect() error {
 	return nil
 }
 
-// StopStream stops a specific event stream
-func (c *GatewayClient) StopStream(subscriptionID string) error {
+// StopStream stops a specific event stream and commit the billing
+func (c *GatewayClient) StopStream(subscriptionID string) (*node2.DisconnectStreamResponse, error) {
 	c.streamsMu.RLock()
 	subscription, exists := c.streams[subscriptionID]
 	c.streamsMu.RUnlock()
 
 	if !exists {
-		return fmt.Errorf("stream %s does not exist", subscriptionID)
+		return nil, fmt.Errorf("stream %s does not exist", subscriptionID)
 	}
 
 	subscription.cancel()
-	c.logger.Infof("Stopped stream: %s", subscriptionID)
-	return nil
+	c.logger.Debugf("Stopped stream: %s", subscriptionID)
+
+	return c.disconnectStream(subscription)
+}
+
+func (c *GatewayClient) disconnectStream(subscription *StreamSubscription) (*node2.DisconnectStreamResponse, error) {
+	nodeClient, err := c.NewNodeClient(subscription.nodeUrl)
+	if err != nil {
+		c.logger.Errorf("Failed to create node client: %v", err)
+		return nil, err
+	}
+
+	header := &metadata.MD{
+		"Authorization": []string{subscription.authToken},
+	}
+	res, err := nodeClient.DisconnectStream(context.Background(), &node2.DisconnectStreamRequest{}, grpc.Header(header))
+	if err != nil {
+		c.logger.Errorf("Failed to disconnect stream: %v", err)
+		return nil, err
+	}
+
+	return res, nil
 }
 
 func (c *GatewayClient) RegisterNodeMonitorContract(ctx context.Context, nodeUrl string, body RegisterContract) (string, error) {
