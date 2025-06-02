@@ -4,16 +4,15 @@
 // 	protoc        (unknown)
 // source: proto/streaming.proto
 
-package gateway
+package proto
 
 import (
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
-
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
 )
 
 const (
@@ -115,9 +114,9 @@ func (x *GetListNodeRequest) GetChainId() string {
 type GetListNodeResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Message       string          `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	Nodes         []*NodeResponse `protobuf:"bytes,3,rep,name=nodes,proto3" json:"nodes,omitempty"`
-	ErrorMessage  string          `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"` // Optional, for error cases
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Nodes         []*NodeResponse        `protobuf:"bytes,3,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"` // Optional, for error cases
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -184,8 +183,9 @@ type NodeResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Domain        string                 `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
 	DomainHealth  string                 `protobuf:"bytes,2,opt,name=domain_health,json=domainHealth,proto3" json:"domain_health,omitempty"`
-	Node          string                 `protobuf:"bytes,3,opt,name=node,proto3" json:"node,omitempty"`
-	ChainId       string                 `protobuf:"bytes,4,opt,name=chainId,proto3" json:"chainId,omitempty"`
+	DomainRpc     string                 `protobuf:"bytes,3,opt,name=domain_rpc,json=domainRpc,proto3" json:"domain_rpc,omitempty"`
+	Node          string                 `protobuf:"bytes,4,opt,name=node,proto3" json:"node,omitempty"`
+	ChainId       string                 `protobuf:"bytes,5,opt,name=chainId,proto3" json:"chainId,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -234,6 +234,13 @@ func (x *NodeResponse) GetDomainHealth() string {
 	return ""
 }
 
+func (x *NodeResponse) GetDomainRpc() string {
+	if x != nil {
+		return x.DomainRpc
+	}
+	return ""
+}
+
 func (x *NodeResponse) GetNode() string {
 	if x != nil {
 		return x.Node
@@ -252,9 +259,10 @@ func (x *NodeResponse) GetChainId() string {
 type GetNodeResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NodeAddress   string                 `protobuf:"bytes,1,opt,name=node_address,json=nodeAddress,proto3" json:"node_address,omitempty"`
-	NodeDomain    string                 `protobuf:"bytes,2,opt,name=node_domain,json=nodeDomain,proto3" json:"node_domain,omitempty"`
+	Domain        string                 `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
 	DomainHealth  string                 `protobuf:"bytes,3,opt,name=domain_health,json=domainHealth,proto3" json:"domain_health,omitempty"`
-	ErrorMessage  string                 `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"` // Optional, for error cases
+	DomainRpc     string                 `protobuf:"bytes,4,opt,name=domain_rpc,json=domainRpc,proto3" json:"domain_rpc,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,5,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"` // Optional, for error cases
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -296,9 +304,9 @@ func (x *GetNodeResponse) GetNodeAddress() string {
 	return ""
 }
 
-func (x *GetNodeResponse) GetNodeDomain() string {
+func (x *GetNodeResponse) GetDomain() string {
 	if x != nil {
-		return x.NodeDomain
+		return x.Domain
 	}
 	return ""
 }
@@ -306,6 +314,13 @@ func (x *GetNodeResponse) GetNodeDomain() string {
 func (x *GetNodeResponse) GetDomainHealth() string {
 	if x != nil {
 		return x.DomainHealth
+	}
+	return ""
+}
+
+func (x *GetNodeResponse) GetDomainRpc() string {
+	if x != nil {
+		return x.DomainRpc
 	}
 	return ""
 }
@@ -323,9 +338,10 @@ type RegisterNodeRequest struct {
 	Node          string                 `protobuf:"bytes,1,opt,name=node,proto3" json:"node,omitempty"`
 	ChainId       string                 `protobuf:"bytes,2,opt,name=chainId,proto3" json:"chainId,omitempty"`
 	Domain        string                 `protobuf:"bytes,3,opt,name=domain,proto3" json:"domain,omitempty"`
-	DomainHealth  string                 `protobuf:"bytes,4,opt,name=domain_health,json=domainHealth,proto3" json:"domain_health,omitempty"`
-	Port          string                 `protobuf:"bytes,5,opt,name=port,proto3" json:"port,omitempty"`
-	Secret        string                 `protobuf:"bytes,6,opt,name=secret,proto3" json:"secret,omitempty"`
+	DomainRpc     string                 `protobuf:"bytes,4,opt,name=domain_rpc,json=domainRpc,proto3" json:"domain_rpc,omitempty"`
+	DomainHealth  string                 `protobuf:"bytes,5,opt,name=domain_health,json=domainHealth,proto3" json:"domain_health,omitempty"`
+	Port          string                 `protobuf:"bytes,6,opt,name=port,proto3" json:"port,omitempty"`
+	Secret        string                 `protobuf:"bytes,7,opt,name=secret,proto3" json:"secret,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -377,6 +393,13 @@ func (x *RegisterNodeRequest) GetChainId() string {
 func (x *RegisterNodeRequest) GetDomain() string {
 	if x != nil {
 		return x.Domain
+	}
+	return ""
+}
+
+func (x *RegisterNodeRequest) GetDomainRpc() string {
+	if x != nil {
+		return x.DomainRpc
 	}
 	return ""
 }
@@ -795,25 +818,30 @@ const file_proto_streaming_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12#\n" +
 	"\x05nodes\x18\x03 \x03(\v2\r.NodeResponseR\x05nodes\x12#\n" +
-	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"y\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"\x98\x01\n" +
 	"\fNodeResponse\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\x12#\n" +
-	"\rdomain_health\x18\x02 \x01(\tR\fdomainHealth\x12\x12\n" +
-	"\x04node\x18\x03 \x01(\tR\x04node\x12\x18\n" +
-	"\achainId\x18\x04 \x01(\tR\achainId\"\x9f\x01\n" +
+	"\rdomain_health\x18\x02 \x01(\tR\fdomainHealth\x12\x1d\n" +
+	"\n" +
+	"domain_rpc\x18\x03 \x01(\tR\tdomainRpc\x12\x12\n" +
+	"\x04node\x18\x04 \x01(\tR\x04node\x12\x18\n" +
+	"\achainId\x18\x05 \x01(\tR\achainId\"\xb5\x01\n" +
 	"\x0fGetNodeResponse\x12!\n" +
-	"\fnode_address\x18\x01 \x01(\tR\vnodeAddress\x12\x1f\n" +
-	"\vnode_domain\x18\x02 \x01(\tR\n" +
-	"nodeDomain\x12#\n" +
-	"\rdomain_health\x18\x03 \x01(\tR\fdomainHealth\x12#\n" +
-	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"\xac\x01\n" +
+	"\fnode_address\x18\x01 \x01(\tR\vnodeAddress\x12\x16\n" +
+	"\x06domain\x18\x02 \x01(\tR\x06domain\x12#\n" +
+	"\rdomain_health\x18\x03 \x01(\tR\fdomainHealth\x12\x1d\n" +
+	"\n" +
+	"domain_rpc\x18\x04 \x01(\tR\tdomainRpc\x12#\n" +
+	"\rerror_message\x18\x05 \x01(\tR\ferrorMessage\"\xcb\x01\n" +
 	"\x13RegisterNodeRequest\x12\x12\n" +
 	"\x04node\x18\x01 \x01(\tR\x04node\x12\x18\n" +
 	"\achainId\x18\x02 \x01(\tR\achainId\x12\x16\n" +
-	"\x06domain\x18\x03 \x01(\tR\x06domain\x12#\n" +
-	"\rdomain_health\x18\x04 \x01(\tR\fdomainHealth\x12\x12\n" +
-	"\x04port\x18\x05 \x01(\tR\x04port\x12\x16\n" +
-	"\x06secret\x18\x06 \x01(\tR\x06secret\"g\n" +
+	"\x06domain\x18\x03 \x01(\tR\x06domain\x12\x1d\n" +
+	"\n" +
+	"domain_rpc\x18\x04 \x01(\tR\tdomainRpc\x12#\n" +
+	"\rdomain_health\x18\x05 \x01(\tR\fdomainHealth\x12\x12\n" +
+	"\x04port\x18\x06 \x01(\tR\x04port\x12\x16\n" +
+	"\x06secret\x18\a \x01(\tR\x06secret\"g\n" +
 	"\x15ValidateClientRequest\x12\x1c\n" +
 	"\tsignature\x18\x01 \x01(\tR\tsignature\x12\x1c\n" +
 	"\ttimestamp\x18\x02 \x01(\tR\ttimestamp\x12\x12\n" +

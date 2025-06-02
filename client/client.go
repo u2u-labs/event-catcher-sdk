@@ -19,6 +19,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 )
@@ -51,6 +52,7 @@ type StreamSubscription struct {
 	cancel    context.CancelFunc
 	authToken string
 	nodeUrl   string
+	tlsConfig *tls.Config
 }
 
 // GatewayClient is the main SDK client
@@ -65,6 +67,7 @@ type GatewayClient struct {
 	// Configuration
 	retryConfig *RetryConfig
 	timeout     time.Duration
+	tlsConfig   *tls.Config
 
 	// Internal
 	httpClient *http.Client
@@ -135,10 +138,12 @@ func NewClient(config *GatewayOpts) *GatewayClient {
 		Timeout: config.Timeout,
 	}
 
+	var tlsConfig *tls.Config
 	if config.TLSConfig != nil {
 		httpClient.Transport = &http.Transport{
 			TLSClientConfig: config.TLSConfig,
 		}
+		tlsConfig = config.TLSConfig
 	}
 
 	return &GatewayClient{
@@ -147,6 +152,7 @@ func NewClient(config *GatewayOpts) *GatewayClient {
 		timeout:     config.Timeout,
 		httpClient:  httpClient,
 		logger:      config.Logger,
+		tlsConfig:   tlsConfig,
 		streams:     make(map[string]*StreamSubscription),
 	}
 }
@@ -167,9 +173,16 @@ func (c *GatewayClient) RequestNodeFromGateway(ctx context.Context, chainId stri
 }
 
 // newGRPCConn establishes gRPC connection
-func (c *GatewayClient) newGRPCConn(url string) (*grpc.ClientConn, error) {
+func newGRPCConn(url string, tlsConfig *tls.Config) (*grpc.ClientConn, error) {
+	var tlsOpts grpc.DialOption
+	if tlsConfig != nil {
+		tlsOpts = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
+	} else {
+		tlsOpts = grpc.WithTransportCredentials(insecure.NewCredentials())
+	}
+
 	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		tlsOpts,
 	}
 
 	conn, err := grpc.NewClient(url, opts...)
@@ -204,9 +217,11 @@ func (c *GatewayClient) ValidateClient(ctx context.Context, nodeAddress, signatu
 /*
 SubscribeEvent will spawn a goroutine to watch for events matching the filter for you
 
-# But you need to pass a handler function to handle the events
+# You should pass a handler function to handle the events
 
 # You need nodeURL returned from RequestNodeFromGateway and an authToken returned from ValidateClient
+
+# Pass TLS config if you want to use TLS, leave it nil otherwise
 
 # Example:
 ```go
@@ -228,7 +243,7 @@ SubscribeEvent will spawn a goroutine to watch for events matching the filter fo
 
 ```
 */
-func (c *GatewayClient) SubscribeEvent(ctx context.Context, nodeURL, authToken string, filter *node2.StreamEventsRequest, handler EventHandler) (*StreamSubscription, error) {
+func (c *GatewayClient) SubscribeEvent(ctx context.Context, tlsConfig *tls.Config, nodeURL, authToken string, filter *node2.StreamEventsRequest, handler EventHandler) (*StreamSubscription, error) {
 	// Create cancellable context for this stream
 	streamCtx, cancel := context.WithCancel(ctx)
 
@@ -237,13 +252,14 @@ func (c *GatewayClient) SubscribeEvent(ctx context.Context, nodeURL, authToken s
 		cancel:    cancel,
 		authToken: authToken,
 		nodeUrl:   nodeURL,
+		tlsConfig: tlsConfig,
 	}
 
 	// Start stream
 	c.streamWg.Add(1)
 	go func() {
 		defer c.streamWg.Done()
-		client, err := c.NewNodeClient(nodeURL)
+		client, err := NewNodeClient(nodeURL, tlsConfig)
 		if err != nil {
 			c.logger.Errorf("Failed to create node client: %v", err)
 			return
@@ -293,8 +309,8 @@ func (c *GatewayClient) SubscribeEvent(ctx context.Context, nodeURL, authToken s
 }
 
 // NewStream creates a new stream to a node
-func (c *GatewayClient) NewStream(ctx context.Context, nodeURL, authToken string, filter *node2.StreamEventsRequest) (grpc.ServerStreamingClient[node2.Event], error) {
-	client, err := c.NewNodeClient(nodeURL)
+func (c *GatewayClient) NewStream(ctx context.Context, tlsConfig *tls.Config, nodeURL, authToken string, filter *node2.StreamEventsRequest) (grpc.ServerStreamingClient[node2.Event], error) {
+	client, err := NewNodeClient(nodeURL, tlsConfig)
 	if err != nil {
 		c.logger.Errorf("Failed to create node client: %v", err)
 		return nil, err
@@ -348,7 +364,7 @@ func (c *GatewayClient) StopStream(subscriptionID string) (*node2.DisconnectStre
 }
 
 func (c *GatewayClient) disconnectStream(subscription *StreamSubscription) (*node2.DisconnectStreamResponse, error) {
-	nodeClient, err := c.NewNodeClient(subscription.nodeUrl)
+	nodeClient, err := NewNodeClient(subscription.nodeUrl, subscription.tlsConfig)
 	if err != nil {
 		c.logger.Errorf("Failed to create node client: %v", err)
 		return nil, err
@@ -388,7 +404,7 @@ func (c *GatewayClient) RegisterNodeMonitorContract(ctx context.Context, nodeUrl
 
 // NewGatewayClient creates a new GatewayServiceClient
 func (c *GatewayClient) NewGatewayClient() (gateway2.GatewayServiceClient, error) {
-	grpcConn, err := c.newGRPCConn(c.gatewayURL)
+	grpcConn, err := newGRPCConn(c.gatewayURL, c.tlsConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -397,8 +413,8 @@ func (c *GatewayClient) NewGatewayClient() (gateway2.GatewayServiceClient, error
 }
 
 // NewNodeClient creates a new NodeServiceClient
-func (c *GatewayClient) NewNodeClient(nodeUrl string) (node2.EventServiceClient, error) {
-	grpcConn, err := c.newGRPCConn(nodeUrl)
+func NewNodeClient(nodeUrl string, tlsConfig *tls.Config) (node2.EventServiceClient, error) {
+	grpcConn, err := newGRPCConn(nodeUrl, tlsConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -429,7 +445,8 @@ func (c *GatewayClient) makeHTTPRequest(ctx context.Context, method, url, path s
 	return c.httpClient.Do(req)
 }
 
-func SignLoginMessage(privateKey string) (string, error) {
+func SignLoginMessage(privateKey string, ts string) (string, error) {
+	msgSignedOn := fmt.Sprintf("%s:%s", LOGIN_MESSAGE, ts)
 	// Decode hex string private key (without "0x" prefix)
 	keyBytes, err := hex.DecodeString(trimHexPrefix(privateKey))
 	if err != nil {
@@ -443,7 +460,7 @@ func SignLoginMessage(privateKey string) (string, error) {
 	}
 
 	// Ethereum message prefix (standard for eth_sign)
-	msg := []byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(LOGIN_MESSAGE), LOGIN_MESSAGE))
+	msg := []byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(msgSignedOn), msgSignedOn))
 
 	// Hash the message
 	msgHash := crypto.Keccak256Hash(msg)

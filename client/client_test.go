@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 	"testing"
 	"time"
@@ -12,8 +13,9 @@ import (
 
 func newTestClient() *GatewayClient {
 	return NewClient(&GatewayOpts{
-		GatewayURL: "http://127.0.0.1:3000",
+		GatewayURL: "localhost:50051",
 		Logger:     zap.NewNop().Sugar(),
+		TLSConfig:  nil, // set nil for gateway with non-TLS connection
 	})
 }
 
@@ -30,7 +32,7 @@ func TestPingNode(t *testing.T) {
 		return
 	}
 	// check healthy node get request
-	req, err := http.NewRequest(http.MethodGet, nodeInfo.Nodes[0].Domain+"/health", nil)
+	req, err := http.NewRequest(http.MethodGet, nodeInfo.Nodes[0].DomainHealth, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,16 +48,19 @@ func TestPingNode(t *testing.T) {
 
 func TestSubscribeEventStream(t *testing.T) {
 	client := newTestClient()
-	nodeUrl := "http://127.0.0.1:8080"
+	nodeUrl := "node-url.com"
+	nodeAddress := "0x01857E2BCFcb8B4eF76Df6590F8dCd3bf736C9E9"
+	ts := time.Now().UTC().Format(time.RFC3339)
 
 	// sign login request
-	signature, err := SignLoginMessage("4da8145fbf8343a9f5c517644d229a63e3dd51266e096dc6dd6ac2dca9a737fe")
+	signature, err := SignLoginMessage("<your-private-key>", ts)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	t.Logf("signature: %s", signature)
 	// get auth token
-	auth, err := client.ValidateClient(context.Background(), nodeUrl, signature, time.Now().UTC().Format(time.RFC3339))
+	auth, err := client.ValidateClient(context.Background(), nodeAddress, signature, ts)
 	if err != nil || !auth.Success {
 		t.Fatal(err)
 	}
@@ -66,7 +71,7 @@ func TestSubscribeEventStream(t *testing.T) {
 		ContractAddress: "0x8B0b7E0c9C5a6B48F5bA0352713B85c2C4973B78",
 		EventSignature:  "NodeAdded",
 	}
-	streamSub, err := client.SubscribeEvent(context.Background(), nodeUrl, auth.ConnectionToken, filter, nil)
+	streamSub, err := client.SubscribeEvent(context.Background(), &tls.Config{}, nodeUrl, auth.ConnectionToken, filter, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +80,7 @@ func TestSubscribeEventStream(t *testing.T) {
 
 func TestRegisterMonitorContract(t *testing.T) {
 	client := newTestClient()
-	nodeUrl := "http://127.0.0.1:8080"
+	nodeUrl := "node-url.com"
 	id, err := client.RegisterNodeMonitorContract(context.Background(), nodeUrl, RegisterContract{
 		ChainId:         2484,
 		ContractAddress: "0x8B0b7E0c9C5a6B48F5bA0352713B85c2C4973B78",

@@ -60,7 +60,8 @@ nodeURL := nodes.Nodes[0].Domain
 ### 3. Authenticate with Node
 
 ```go
-signature, err := client.SignLoginMessage("your_private_key_hex")
+timestamp := time.Now().UTC().Format(time.RFC3339)
+signature, err := client.SignLoginMessage("your_private_key_hex", timestamp)
 if err != nil {
     panic(err)
 }
@@ -69,7 +70,7 @@ auth, err := client.ValidateClient(
     context.Background(), 
     nodeURL, 
     signature, 
-    time.Now().UTC().Format(time.RFC3339),
+    timestamp,
 )
 if err != nil || !auth.Success {
     panic(err)
@@ -96,6 +97,7 @@ handler := func(event *client.Event) {
 
 subscription, err := client.SubscribeEvent(
     context.Background(), 
+    nil, // TLS config (nil for no TLS)
     nodeURL, 
     authToken, 
     filter, 
@@ -105,10 +107,22 @@ if err != nil {
     panic(err)
 }
 
+log.Printf("Subscribed to events: %s", subscription.ID)
 select {}
 ```
 
-### 5. Register Contract for Monitoring
+### 5. Stop a Specific Stream
+
+```go
+response, err := client.StopStream(subscription.ID)
+if err != nil {
+    log.Printf("Error stopping stream: %v", err)
+} else {
+    log.Printf("Stream stopped successfully: %v", response)
+}
+```
+
+### 6. Register Contract for Monitoring
 
 ```go
 contractID, err := client.RegisterNodeMonitorContract(
@@ -143,16 +157,6 @@ type GatewayOpts struct {
     Logger      *zap.SugaredLogger
     TLSConfig   *tls.Config
     Debug       bool
-}
-```
-
-#### RetryConfig
-
-```go
-type RetryConfig struct {
-    MaxAttempts int
-    BaseDelay   time.Duration
-    MaxDelay    time.Duration
 }
 ```
 
@@ -209,7 +213,8 @@ func main() {
     
     nodeURL := nodes.Nodes[0].Domain
     
-    signature, err := client.SignLoginMessage("your_private_key_here")
+    timestamp := time.Now().UTC().Format(time.RFC3339)
+    signature, err := client.SignLoginMessage("your_private_key_here", timestamp)
     if err != nil {
         log.Fatal(err)
     }
@@ -218,7 +223,7 @@ func main() {
         context.Background(), 
         nodeURL, 
         signature, 
-        time.Now().UTC().Format(time.RFC3339),
+        timestamp,
     )
     if err != nil || !auth.Success {
         log.Fatal("Authentication failed")
@@ -247,6 +252,7 @@ func main() {
     
     subscription, err := client.SubscribeEvent(
         context.Background(), 
+        nil, // TLS config
         nodeURL, 
         auth.ConnectionToken, 
         filter, 
@@ -260,34 +266,70 @@ func main() {
     
     log.Printf("Subscribed to events: %s", subscription.ID)
     
+    // Stop the stream after some time
+    go func() {
+        time.Sleep(60 * time.Second)
+        response, err := client.StopStream(subscription.ID)
+        if err != nil {
+            log.Printf("Error stopping stream: %v", err)
+        } else {
+            log.Printf("Stream stopped: %v", response)
+        }
+    }()
+    
     select {}
 }
 ```
 
-## Error Handling
+## Key Changes
 
-The SDK includes built-in retry logic for network operations. Configure retry behavior using the `RetryConfig` struct:
+### Function Signature Updates
+
+1. **SignLoginMessage**: Now requires timestamp parameter
+   ```go
+   signature, err := client.SignLoginMessage(privateKey, timestamp)
+   ```
+
+2. **SubscribeEvent**: Now includes TLS config parameter
+   ```go
+   subscription, err := client.SubscribeEvent(ctx, tlsConfig, nodeURL, authToken, filter, handler)
+   ```
+
+3. **NewStream**: New method for creating raw streams without handlers
+   ```go
+   stream, err := client.NewStream(ctx, tlsConfig, nodeURL, authToken, filter)
+   ```
+
+4. **StopStream**: New method to stop individual streams and commit billing
+   ```go
+   response, err := client.StopStream(subscriptionID)
+   ```
+
+### Stream Management
+
+- Each subscription now has a unique ID for management
+- Individual streams can be stopped while keeping others active
+- Billing is committed when streams are properly disconnected
+
+## TLS Configuration
+
+For secure connections, provide TLS configuration:
 
 ```go
-client := client.NewClient(&client.GatewayOpts{
-    RetryConfig: &client.RetryConfig{
-        MaxAttempts: 5,
-        BaseDelay:   2 * time.Second,
-        MaxDelay:    60 * time.Second,
-    },
-})
-```
+import "crypto/tls"
 
-## Logging
+tlsConfig := &tls.Config{
+ServerName: "your-server.com",
+}
 
-The SDK uses Uber's Zap logger. You can provide your own logger or use the default:
-
-```go
-logger, _ := zap.NewDevelopment()
-client := client.NewClient(&client.GatewayOpts{
-    Logger: logger.Sugar(),
-    Debug:  true,
-})
+subscription, err := client.SubscribeEvent(
+ctx,
+tlsConfig,
+nodeURL,
+authToken,
+filter,
+handler,
+)
 ```
 
 ## License
