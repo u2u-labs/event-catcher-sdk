@@ -24,6 +24,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"time"
 
 	"github.com/u2u-labs/event-catcher-sdk/client"
@@ -35,9 +36,7 @@ func main() {
 
 	// With custom configuration
 	client := client.NewClient(&client.GatewayOpts{
-		GatewayURL: "https://gateway.eventcatcher.api",
 		Timeout:    30 * time.Second,
-		Debug:      true,
 	})
 }
 ```
@@ -108,6 +107,7 @@ if err != nil {
 }
 
 log.Printf("Subscribed to events: %s", subscription.ID)
+// Keep the program running to receive events
 select {}
 ```
 
@@ -197,9 +197,7 @@ import (
 )
 
 func main() {
-    client := client.NewClient(&client.GatewayOpts{
-        Debug: true,
-    })
+    client := client.NewClient(&client.GatewayOpts{})
     defer client.Disconnect()
     
     nodes, err := client.RequestNodeFromGateway(context.Background(), "2484")
@@ -212,6 +210,8 @@ func main() {
     }
     
     nodeURL := nodes.Nodes[0].Domain
+    rpcURL := nodes.Nodes[0].DomainRpc
+    nodeAddress := "0x01857E2BCFcb8B4eF76Df6590F8dCd3bf736C9E9"
     
     timestamp := time.Now().UTC().Format(time.RFC3339)
     signature, err := client.SignLoginMessage("your_private_key_here", timestamp)
@@ -220,8 +220,8 @@ func main() {
     }
     
     auth, err := client.ValidateClient(
-        context.Background(), 
-        nodeURL, 
+        context.Background(),
+        nodeAddress, 
         signature, 
         timestamp,
     )
@@ -236,6 +236,7 @@ func main() {
             ChainId:         2484,
             ContractAddress: "0x8B0b7E0c9C5a6B48F5bA0352713B85c2C4973B78",
             EventSignature:  "Transfer(address indexed from, address indexed to, uint256 value)",
+            EventAbi:        "[{\\\"anonymous\\\":false,\\\"inputs\\\":[{\\\"indexed\\\":true,\\\"internalType\\\":\\\"address\\\",\\\"name\\\":\\\"operator\\\",\\\"type\\\":\\\"address\\\"},{\\\"indexed\\\":true,\\\"internalType\\\":\\\"address\\\",\\\"name\\\":\\\"from\\\",\\\"type\\\":\\\"address\\\"},{\\\"indexed\\\":true,\\\"internalType\\\":\\\"address\\\",\\\"name\\\":\\\"to\\\",\\\"type\\\":\\\"address\\\"},{\\\"indexed\\\":false,\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"id\\\",\\\"type\\\":\\\"uint256\\\"},{\\\"indexed\\\":false,\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"value\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"name\\\":\\\"TransferSingle\\\",\\\"type\\\":\\\"event\\\"}]",
             StartBlock:      50035775,
         },
     )
@@ -253,7 +254,7 @@ func main() {
     subscription, err := client.SubscribeEvent(
         context.Background(), 
         nil, // TLS config
-        nodeURL, 
+        rpcURL, 
         auth.ConnectionToken, 
         filter, 
         func(event *client.Event) {
@@ -281,30 +282,6 @@ func main() {
 }
 ```
 
-## Key Changes
-
-### Function Signature Updates
-
-1. **SignLoginMessage**: Now requires timestamp parameter
-   ```go
-   signature, err := client.SignLoginMessage(privateKey, timestamp)
-   ```
-
-2. **SubscribeEvent**: Now includes TLS config parameter
-   ```go
-   subscription, err := client.SubscribeEvent(ctx, tlsConfig, nodeURL, authToken, filter, handler)
-   ```
-
-3. **NewStream**: New method for creating raw streams without handlers
-   ```go
-   stream, err := client.NewStream(ctx, tlsConfig, nodeURL, authToken, filter)
-   ```
-
-4. **StopStream**: New method to stop individual streams and commit billing
-   ```go
-   response, err := client.StopStream(subscriptionID)
-   ```
-
 ### Stream Management
 
 - Each subscription now has a unique ID for management
@@ -318,17 +295,15 @@ For secure connections, provide TLS configuration:
 ```go
 import "crypto/tls"
 
-tlsConfig := &tls.Config{
-ServerName: "your-server.com",
-}
+tlsConfig := &tls.Config{}
 
 subscription, err := client.SubscribeEvent(
-ctx,
-tlsConfig,
-nodeURL,
-authToken,
-filter,
-handler,
+    ctx,
+    tlsConfig,
+    rpcURL,
+    authToken,
+    filter,
+    handler,
 )
 ```
 
@@ -339,9 +314,9 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Contributing
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
+2. Create your feature branch (`git checkout -b ft/amazing-feature`)
+3. Commit your changes (`git commit -m 'update: add amazing feature'`)
+4. Push to the branch (`git push origin ft/amazing-feature`)
 5. Open a Pull Request
 
 ## Support
