@@ -15,7 +15,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
-	gateway2 "github.com/u2u-labs/event-catcher-sdk/proto/gateway"
+	eventcatcher "github.com/u2u-labs/event-catcher-sdk"
 	node2 "github.com/u2u-labs/event-catcher-sdk/proto/node"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -93,12 +93,12 @@ func DefaultRetryConfig() *RetryConfig {
 
 // GatewayOpts holds client configuration
 type GatewayOpts struct {
-	GatewayURL  string
 	RetryConfig *RetryConfig
 	Timeout     time.Duration
 	Logger      *zap.SugaredLogger
 	TLSConfig   *tls.Config
 	Debug       bool
+	Mode        *eventcatcher.Mode
 }
 
 // NewClient creates a new Event Catcher SDK client
@@ -107,12 +107,13 @@ func NewClient(config *GatewayOpts) *GatewayClient {
 		config = &GatewayOpts{}
 	}
 
-	if config.GatewayURL == "" {
-		config.GatewayURL = "https://gateway.eventcatcher.api"
-	}
-
 	if config.RetryConfig == nil {
 		config.RetryConfig = DefaultRetryConfig()
+	}
+
+	if config.Mode == nil {
+		mode := eventcatcher.Sandbox
+		config.Mode = &mode
 	}
 
 	if config.Timeout == 0 {
@@ -148,7 +149,7 @@ func NewClient(config *GatewayOpts) *GatewayClient {
 	}
 
 	return &GatewayClient{
-		gatewayURL:  config.GatewayURL,
+		gatewayURL:  eventcatcher.GetBaseURL(*config.Mode),
 		retryConfig: config.RetryConfig,
 		timeout:     config.Timeout,
 		httpClient:  httpClient,
@@ -158,15 +159,38 @@ func NewClient(config *GatewayOpts) *GatewayClient {
 	}
 }
 
+type GetListNodeResponse struct {
+	Success      bool           `json:"success"`
+	Message      string         `json:"message"`
+	ErrorMessage string         `json:"errorMessage"`
+	Nodes        []NodeResponse `json:"nodes"`
+}
+
+type NodeResponse struct {
+	Domain       string `json:"domain"`
+	DomainHealth string `json:"domainHealth"`
+	DomainRpc    string `json:"domainRpc"`
+	Node         string `json:"node"`
+	ChainId      string `json:"chainId"`
+}
+
 // RequestNodeFromGateway requests node address from gateway
-func (c *GatewayClient) RequestNodeFromGateway(ctx context.Context, chainId string) (*gateway2.GetListNodeResponse, error) {
-	client, err := c.NewGatewayClient()
+func (c *GatewayClient) RequestNodeFromGateway(ctx context.Context, chainId string) (*GetListNodeResponse, error) {
+	res, err := c.makeHTTPRequest(ctx, http.MethodGet, c.gatewayURL, "/v1/gateway/get_list_node?chain_id="+chainId, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := client.GetListNode(ctx, &gateway2.GetListNodeRequest{ChainId: chainId})
-	if err != nil {
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("failed to get node: %s, %s", res.Status, string(body))
+	}
+	result := &GetListNodeResponse{}
+	if err = json.NewDecoder(res.Body).Decode(result); err != nil {
 		return nil, err
 	}
 
@@ -194,25 +218,49 @@ func newGRPCConn(url string, tlsConfig *tls.Config) (*grpc.ClientConn, error) {
 	return conn, nil
 }
 
+type Receipt struct {
+	Node             string `json:"node"`
+	TotalServedBytes string `json:"totalServedBytes"`
+	Status           string `json:"status"`
+	Nonce            string `json:"nonce"`
+}
+
+type ValidateClientResponse struct {
+	Success         bool     `json:"success"`
+	Message         string   `json:"message"`
+	ConnectionToken string   `json:"connectionToken"`
+	Receipt         *Receipt `json:"receipt"`
+	ErrorMessage    string   `json:"errorMessage"`
+}
+
 /*
 ValidateClient requests token for a node from gateway
 */
-func (c *GatewayClient) ValidateClient(ctx context.Context, nodeAddress, signature, timestamp string) (*gateway2.ValidateClientResponse, error) {
-	client, err := c.NewGatewayClient()
+func (c *GatewayClient) ValidateClient(ctx context.Context, nodeAddress, signature, timestamp string) (*ValidateClientResponse, error) {
+	body := map[string]string{
+		"node":      nodeAddress,
+		"signature": signature,
+		"timestamp": timestamp,
+	}
+	res, err := c.makeHTTPRequest(ctx, http.MethodGet, c.gatewayURL, "/v1/gateway/validate_client", body)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	resData, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
 	}
 
-	data, err := client.ValidateClient(ctx, &gateway2.ValidateClientRequest{
-		Node:      nodeAddress,
-		Signature: signature,
-		Timestamp: timestamp,
-	})
-	if err != nil {
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("failed to get node: %s, %s", res.Status, string(resData))
+	}
+	result := &ValidateClientResponse{}
+	if err = json.NewDecoder(res.Body).Decode(result); err != nil {
 		return nil, err
 	}
 
-	return data, nil
+	return result, err
 }
 
 /*
@@ -383,14 +431,18 @@ func (c *GatewayClient) disconnectStream(subscription *StreamSubscription) (*nod
 	return res, nil
 }
 
-func (c *GatewayClient) RegisterNodeMonitorContract(ctx context.Context, nodeUrl string, body RegisterContract) (string, error) {
-	res, err := c.makeHTTPRequest(ctx, "POST", nodeUrl, "/api/v1/contracts", body)
+func (c *GatewayClient) RegisterNodeMonitorContract(ctx context.Context, nodeUrl string, data RegisterContract) (string, error) {
+	res, err := c.makeHTTPRequest(ctx, "POST", nodeUrl, "/api/v1/contracts", data)
 	if err != nil {
 		return "", err
 	}
 	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return "", err
+	}
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusBadRequest {
-		return "", fmt.Errorf("failed to register contract: %s", res.Status)
+		return "", fmt.Errorf("failed to register contract: %s, %s", res.Status, string(body))
 	}
 
 	var id struct {
@@ -427,8 +479,12 @@ func (c *GatewayClient) GetEventCurrentSyncStatus(ctx context.Context, nodeUrl s
 		return nil, err
 	}
 	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("failed to get contract: %s", res.Status)
+		return nil, fmt.Errorf("failed to get contract: %s, %s", res.Status, string(body))
 	}
 
 	var status SyncStatusResponse
@@ -438,16 +494,6 @@ func (c *GatewayClient) GetEventCurrentSyncStatus(ctx context.Context, nodeUrl s
 	}
 
 	return &status, nil
-}
-
-// NewGatewayClient creates a new GatewayServiceClient
-func (c *GatewayClient) NewGatewayClient() (gateway2.GatewayServiceClient, error) {
-	grpcConn, err := newGRPCConn(c.gatewayURL, c.tlsConfig)
-	if err != nil {
-		return nil, err
-	}
-	client := gateway2.NewGatewayServiceClient(grpcConn)
-	return client, nil
 }
 
 // NewNodeClient creates a new NodeServiceClient

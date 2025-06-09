@@ -7,15 +7,15 @@ import (
 	"testing"
 	"time"
 
+	eventcatcher "github.com/u2u-labs/event-catcher-sdk"
 	"github.com/u2u-labs/event-catcher-sdk/proto/node"
 	"go.uber.org/zap"
 )
 
 func newTestClient() *GatewayClient {
 	return NewClient(&GatewayOpts{
-		GatewayURL: "localhost:50051",
-		Logger:     zap.NewNop().Sugar(),
-		TLSConfig:  nil, // set nil for gateway with non-TLS connection
+		Logger:    zap.NewNop().Sugar(),
+		TLSConfig: &tls.Config{}, // set nil for gateway with non-TLS connection
 	})
 }
 
@@ -48,7 +48,7 @@ func TestPingNode(t *testing.T) {
 
 func TestSubscribeEventStream(t *testing.T) {
 	client := newTestClient()
-	nodeUrl := "node-url.com"
+	nodeRPCUrl := ""
 	nodeAddress := "0x01857E2BCFcb8B4eF76Df6590F8dCd3bf736C9E9"
 	ts := time.Now().UTC().Format(time.RFC3339)
 
@@ -71,7 +71,7 @@ func TestSubscribeEventStream(t *testing.T) {
 		ContractAddress: "0x8B0b7E0c9C5a6B48F5bA0352713B85c2C4973B78",
 		EventSignature:  "NodeAdded",
 	}
-	streamSub, err := client.SubscribeEvent(context.Background(), &tls.Config{}, nodeUrl, auth.ConnectionToken, filter, nil)
+	streamSub, err := client.SubscribeEvent(context.Background(), &tls.Config{}, nodeRPCUrl, auth.ConnectionToken, filter, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,12 +80,12 @@ func TestSubscribeEventStream(t *testing.T) {
 
 func TestRegisterMonitorContract(t *testing.T) {
 	client := newTestClient()
-	nodeUrl := "node-url.com"
+	nodeUrl := eventcatcher.GetBaseURL(eventcatcher.Sandbox)
 	id, err := client.RegisterNodeMonitorContract(context.Background(), nodeUrl, RegisterContract{
 		ChainId:         2484,
 		ContractAddress: "0x8B0b7E0c9C5a6B48F5bA0352713B85c2C4973B78",
 		EventSignature:  "NodeAdded(address indexed node)",
-		EventAbi:        "",
+		EventAbi:        "[{\\\"anonymous\\\":false,\\\"inputs\\\":[{\\\"indexed\\\":true,\\\"internalType\\\":\\\"address\\\",\\\"name\\\":\\\"operator\\\",\\\"type\\\":\\\"address\\\"},{\\\"indexed\\\":true,\\\"internalType\\\":\\\"address\\\",\\\"name\\\":\\\"from\\\",\\\"type\\\":\\\"address\\\"},{\\\"indexed\\\":true,\\\"internalType\\\":\\\"address\\\",\\\"name\\\":\\\"to\\\",\\\"type\\\":\\\"address\\\"},{\\\"indexed\\\":false,\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"id\\\",\\\"type\\\":\\\"uint256\\\"},{\\\"indexed\\\":false,\\\"internalType\\\":\\\"uint256\\\",\\\"name\\\":\\\"value\\\",\\\"type\\\":\\\"uint256\\\"}],\\\"name\\\":\\\"TransferSingle\\\",\\\"type\\\":\\\"event\\\"}]",
 		StartBlock:      50035775,
 	})
 	if err != nil {
@@ -96,7 +96,7 @@ func TestRegisterMonitorContract(t *testing.T) {
 
 func TestGetEventCurrentSyncStatus(t *testing.T) {
 	client := newTestClient()
-	nodeUrl := "node-url.com"
+	nodeUrl := eventcatcher.GetBaseURL(eventcatcher.Sandbox)
 	rs, err := client.GetEventCurrentSyncStatus(context.Background(), nodeUrl, SyncStatusParams{
 		ChainId:         2484,
 		ContractAddress: "0x8B0b7E0c9C5a6B48F5bA0352713B85c2C4973B78",
