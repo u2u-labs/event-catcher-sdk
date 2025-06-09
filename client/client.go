@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"strings"
 	"sync"
@@ -400,6 +401,43 @@ func (c *GatewayClient) RegisterNodeMonitorContract(ctx context.Context, nodeUrl
 		return "", err
 	}
 	return id.ID, nil
+}
+
+type SyncStatusParams struct {
+	ChainId         int    `json:"chainId"`
+	ContractAddress string `json:"contractAddress"`
+	EventName       string `json:"eventName"`
+}
+
+type SyncStatusResponse struct {
+	ChainId            string   `json:"chainId"`
+	ContractAddress    string   `json:"contractAddress"`
+	EventName          string   `json:"eventName"`
+	CurrentBlockNumber *big.Int `json:"currentBlockNumber"`
+}
+
+func (c *GatewayClient) GetEventCurrentSyncStatus(ctx context.Context, nodeUrl string, params SyncStatusParams) (*SyncStatusResponse, error) {
+	res, err := c.makeHTTPRequest(
+		ctx,
+		"GET",
+		nodeUrl,
+		fmt.Sprintf("/api/v1/status/%d/%s/%s", params.ChainId, params.ContractAddress, params.EventName),
+		nil)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("failed to get contract: %s", res.Status)
+	}
+
+	var status SyncStatusResponse
+	err = json.NewDecoder(res.Body).Decode(&status)
+	if err != nil {
+		return nil, err
+	}
+
+	return &status, nil
 }
 
 // NewGatewayClient creates a new GatewayServiceClient

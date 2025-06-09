@@ -93,3 +93,17 @@ func TestRegisterMonitorContract(t *testing.T) {
 	}
 	t.Log(id)
 }
+
+func TestGetEventCurrentSyncStatus(t *testing.T) {
+	client := newTestClient()
+	nodeUrl := "node-url.com"
+	rs, err := client.GetEventCurrentSyncStatus(context.Background(), nodeUrl, SyncStatusParams{
+		ChainId:         2484,
+		ContractAddress: "0x8B0b7E0c9C5a6B48F5bA0352713B85c2C4973B78",
+		EventName:       "NodeAdded(address indexed node)",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(rs)
+}
